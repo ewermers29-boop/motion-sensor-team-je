@@ -2,7 +2,8 @@
 
 Computer Coding Studio, fall 2026. The camera, the model, one worked signal and a fake sensor, so your pair starts from a piece that already runs.
 
-**Live:** https://flyinthelyceum.github.io/sensor-layer-starter/ (click Start the camera; press D, B, V)
+**Live:** https://ewermers29-boop.github.io/motion-sensor-team-je/ (click Start the camera; press D, B, V)
+Credits: Jasper Boner and Edward Wermers
 
 ## Make it yours
 
