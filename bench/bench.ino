@@ -1,42 +1,67 @@
-// bench.ino: the Arduino half of a bench pair's sensor.
-//
-// It reads the sensor and prints one line per reading over USB, as name and
-// number pairs separated by spaces:
-//
-//   cm 42.5
-//   cm 41.9 light 612
-//
-// That is all it does. The meaning (the signals, the State Table, the piece) is
-// built in the browser by bench/sense-serial.js, the same as the camera pairs.
-//
-// Wired for an HC-SR04 ultrasonic sensor on an Arduino Nano:
-//   VCC -> 5V    GND -> GND    TRIG -> D9    ECHO -> D10
-// To add a second sensor, read it in loop() and print it on the same line,
-// before the println, e.g. a photoresistor divider on A0:
-//   Serial.print(" light "); Serial.print(analogRead(A0));
 
-const int TRIG = 9;
-const int ECHO = 10;
+#include <Wire.h>
+#include <Keypad.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+
+Adafruit_SSD1306 display(
+  SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET
+);
+
+const byte ROWS = 4;
+const byte COLS = 4;
+
+char keys[ROWS][COLS] = {
+  {'3', '6', '9', 'A'},
+  {'B', 'C', '1', '4'},
+  {'7', '5', '2', '8'},
+  {'*', '0', '#', 'D'}
+};
+
+byte rowPins[ROWS] = {5, 4, 3, 2};
+byte colPins[COLS] = {7, 6, 9, 8};
+
+Keypad keypad = Keypad(
+  makeKeymap(keys), rowPins, colPins, ROWS, COLS
+);
 
 void setup() {
-  Serial.begin(115200);          // sense-serial.js opens the port at this speed
-  pinMode(TRIG, OUTPUT);
-  pinMode(ECHO, INPUT);
+  Serial.begin(9600);
+
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println("OLED not detected");
+    while (true) {}
+  }
+
+  display.clearDisplay();
+  display.setTextColor(SSD1306_WHITE);
+  display.setTextSize(1);
+  display.setCursor(0, 0);
+  display.println("Keypad ready!");
+  display.display();
+
+  Serial.println("Keypad ready!");
 }
 
 void loop() {
-  digitalWrite(TRIG, LOW);
-  delayMicroseconds(2);
-  digitalWrite(TRIG, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG, LOW);
-  // The echo time in microseconds; 0 means nothing came back within 30 ms.
-  unsigned long us = pulseIn(ECHO, HIGH, 30000);
-  float cm = us ? us / 58.0 : 400.0; // nothing in range reads as far away
+  char key = keypad.getKey();
 
-  Serial.print("cm ");
-  Serial.print(cm, 1);
-  Serial.println();
+  if (key) {
+    Serial.print("Key pressed: ");
+    Serial.println(key);
 
-  delay(50);                     // about 20 readings a second
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.println("Key pressed:");
+
+    display.setTextSize(3);
+    display.setCursor(20, 25);
+    display.write(key);
+    display.display();
+  }
 }
