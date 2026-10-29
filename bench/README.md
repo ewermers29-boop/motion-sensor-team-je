@@ -10,7 +10,11 @@ The kits come apart, so building the circuit is part of your work.
 
 1. A Nano, a breadboard and jumpers from the north racks in the Innovation Commons. If the Nano's header pins aren't soldered yet, that comes first. Ask Mr. Reasy before you heat an iron.
 2. Two sensors on the one Nano, one per partner. Wire each one and check it in the Arduino IDE's Serial Monitor at 115200 before the browser sees it.
-3. Add your sensor's number to the line `bench.ino` prints (`Serial.print(" light "); Serial.print(analogRead(A0));`), then its function in `SIGNALS` in `sense-serial.js`, then its name in `bench/table-bench.js`.
+3. For the HC-SR04 sample, flash `bench/oled_demo/oled_demo.ino`. To try the keypad, flash `bench/bench.ino`; it is a separate keypad-only sketch.
+
+## The keypad sketch
+
+`bench/bench.ino` scans a 4x4 matrix and keeps the last pressed key on the SSD1306 OLED until another key is pressed. Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Connect the OLED SDA to A4 and SCL to A5. This sketch needs the **U8g2** library.
 
 ## The reference build
 
@@ -37,7 +41,7 @@ This one works, end to end: a Nano and an HC-SR04 on a breadboard, with an optio
 
 *Ours is a US-025A, a clone of the HC-SR04. Same four pins in the same order (VCC, Trig, Echo, GND), same wiring, same sketch. Either board works.*
 
-Flash `bench/bench.ino` for the sensor alone. Open `bench.html` on localhost in Chrome, click **Connect the Arduino**, and pick the board. Press **D**: a hand at about 40 cm or closer reads `close`, further away reads `here`, and an empty room reads `nobody` after two seconds.
+Flash `bench/oled_demo/oled_demo.ino` for the sensor reference build. Open `bench.html` on localhost in Chrome, click **Connect the Arduino**, and pick the board. Press **D**: a hand at about 40 cm or closer reads `close`, further away reads `here`, and an empty room reads `nobody` after two seconds.
 
 **The lag is the table, not the wire.** Each row's hold (0.5, 1 and 2 seconds in `bench/table-bench.js`) is how long a rule has to stay true before the state changes, and the readings are smoothed so one bad echo doesn't count. Short holds feel instant and flicker; long holds feel calm and slow. Choosing them is part of your table.
 
@@ -45,7 +49,7 @@ Flash `bench/bench.ino` for the sensor alone. Open `bench.html` on localhost in 
 
 ### The screen (optional)
 
-`bench/oled_demo/oled_demo.ino` is `bench.ino` plus a readout on a 0.96 in SSD1306 screen (128 x 64, I2C): a state badge, the distance in big digits, a sonar sweep with a dot at the measured range, and a scrolling trace of the history. It prints the same lines over USB, so `bench.html` works with it unchanged. It needs the **U8g2** library (Arduino IDE → Library Manager). On the two-colour screens the top strip is yellow and holds the status.
+`bench/oled_demo/oled_demo.ino` reads the HC-SR04 and draws a readout on a 0.96 in SSD1306 screen (128 x 64, I2C): a state badge, the distance in big digits, a sonar sweep with a dot at the measured range, and a scrolling trace of the history. It prints the same lines over USB, so `bench.html` works with it unchanged. It needs the **U8g2** library (Arduino IDE → Library Manager). On the two-colour screens the top strip is yellow and holds the status.
 
 ![Three photos of the screen side by side: EMPTY reading 400 cm with no echo, HERE at 51.5 cm, NEAR at 7.2 cm with a large dot on the sonar.](img/screen-states.jpg)
 
@@ -55,7 +59,7 @@ Flash `bench/bench.ino` for the sensor alone. Open `bench.html` on localhost in 
 
 | Sensor | A signal it can give | Watch for |
 |---|---|---|
-| HC-SR04 ultrasonic | `near`, `present` | The worked example in `bench.ino`. It reports the nearest thing in a cone about 30° wide, so flat on a desk it hears the desk: aim it up or off the edge. Soft clothing swallows the echo. |
+| HC-SR04 ultrasonic | `near`, `present` | The worked example in `oled_demo/oled_demo.ino`. It reports the nearest thing in a cone about 30° wide, so flat on a desk it hears the desk: aim it up or off the edge. Soft clothing swallows the echo. |
 | PIR motion | `moving` | On or off, and it holds itself on for a few seconds. Someone standing still disappears. |
 | Photoresistor | `shade` | Needs a 10k resistor beside it. The room's light changes through the day. |
 | TCRT5000 reflective IR | `close` | A hand within a few centimetres, nothing further. |
@@ -81,4 +85,3 @@ Mr. Reasy's own bench sensors, lent to pairs whose simple sensor already works i
 | Load cell, 10 kg or 15 kg bar | `loaded`, `weight` | Needs an amplifier board (HX711 or NAU7802) | Nano | Moderate once the amplifier is in hand. Ask Mr. Reasy whether one is free before you plan on it. |
 
 Same rule as the shelf: the sensor gives a number and your State Table gives it a meaning. A radar `count` of 2 is two bodies in range, not a crowd that wants anything.
-
