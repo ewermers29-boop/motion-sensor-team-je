@@ -55,6 +55,10 @@ Flash `bench/oled_demo/oled_demo.ino` for the sensor reference build. Open `benc
 
 *Three states, three thresholds: EMPTY when nothing echoes back (this photo predates the fix that shows `---` instead of 400), HERE closer than 120 cm, NEAR closer than 30 cm. That's a State Table, drawn on a screen. Yours will have different words and different numbers.* The screen's badge thresholds are for the screen only; your real State Table still lives in the browser. It's an extra for after the sensor works, never instead of it.
 
+### The keypad (in progress)
+
+The keypad is still not working correctly, and keypad support is in progress. It is not ready to rely on yet; use the existing sensor and browser workflow for now.
+
 ## What's on the shelf
 
 | Sensor | A signal it can give | Watch for |
