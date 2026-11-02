@@ -14,7 +14,7 @@ The kits come apart, so building the circuit is part of your work.
 
 ## The keypad sketch
 
-`bench/bench.ino` scans a 4x4 matrix and keeps the last pressed key on the SSD1306 OLED until another key is pressed. Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Connect the OLED SDA to A4 and SCL to A5. This sketch needs the **U8g2** library.
+`bench/bench.ino` scans a 4x4 matrix and keeps the last pressed key on the SSD1306 OLED until another key is pressed. A smaller line shows the total number of keys pressed since power-up; the same key and count are printed to Serial. Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Connect the OLED SDA to A4 and SCL to A5. This sketch needs the **Keypad**, **Adafruit GFX**, and **Adafruit SSD1306** libraries.
 
 ## The reference build
 
