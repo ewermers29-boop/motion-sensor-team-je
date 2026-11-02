@@ -85,3 +85,7 @@ Mr. Reasy's own bench sensors, lent to pairs whose simple sensor already works i
 | Load cell, 10 kg or 15 kg bar | `loaded`, `weight` | Needs an amplifier board (HX711 or NAU7802) | Nano | Moderate once the amplifier is in hand. Ask Mr. Reasy whether one is free before you plan on it. |
 
 Same rule as the shelf: the sensor gives a number and your State Table gives it a meaning. A radar `count` of 2 is two bodies in range, not a crowd that wants anything.
+
+States: 
+nothing - no keys are pressed
+on - keys are
