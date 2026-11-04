@@ -29,6 +29,8 @@ Keypad keypad = Keypad(
   makeKeymap(keys), rowPins, colPins, ROWS, COLS
 );
 
+unsigned long keyPressCount = 0;
+
 void setup() {
   Serial.begin(9600);
 
@@ -51,8 +53,11 @@ void loop() {
   char key = keypad.getKey();
 
   if (key) {
+    keyPressCount++;
     Serial.print("Key pressed: ");
-    Serial.println(key);
+    Serial.print(key);
+    Serial.print(" | Keys since boot: ");
+    Serial.println(keyPressCount);
 
     display.clearDisplay();
     display.setTextSize(1);
@@ -62,6 +67,11 @@ void loop() {
     display.setTextSize(3);
     display.setCursor(20, 25);
     display.write(key);
+
+    display.setTextSize(1);
+    display.setCursor(0, 60);
+    display.print("Count: ");
+    display.print(keyPressCount);
     display.display();
   }
 }
