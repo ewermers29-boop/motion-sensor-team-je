@@ -14,7 +14,9 @@ The kits come apart, so building the circuit is part of your work.
 
 ## The keypad sketch
 
-`bench/bench.ino` scans a 4x4 matrix and shows the last pressed key on the left side of the SSD1306 OLED. On the right it displays the total press count and the activity state below it. The states are `Nobody` after four seconds without a press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. It shows `Waiting` during the first four seconds after startup. The total count resets when the state first becomes `Nobody`. The key and total count are also printed to Serial. Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Connect the OLED SDA to A4 and SCL to A5. This sketch needs the **Keypad**, **Adafruit GFX**, and **Adafruit SSD1306** libraries.
+`bench/bench.ino` scans a 4x4 matrix. The original SSD1306 OLED shows the last pressed key, total press count, and activity state. A second SSD1306 OLED shows a character that gets sleepy in `Nobody`, wakes up in `Visitor`, and gets excited in `Omnipresent`; it also reacts briefly to each keypress. The states are `Nobody` after four seconds without a press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. The total count resets when the state first becomes `Nobody`; the sketch shows `Waiting` during the first four seconds after startup.
+
+Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Keep the original OLED connected to SDA A4 and SCL A5. Connect the character OLED's SDA to D11 and SCL to D10. Both OLEDs share 5V and GND. The separate software-I2C pins let both screens use the same I2C address. Both displays use U8g2's page-buffered mode to reduce Nano memory use. This sketch needs the **Keypad** and **U8g2** libraries.
 
 ## The reference build
 
