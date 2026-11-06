@@ -14,7 +14,7 @@ The kits come apart, so building the circuit is part of your work.
 
 ## The keypad sketch
 
-`bench/bench.ino` scans a 4x4 matrix and keeps the last pressed key on the SSD1306 OLED until another key is pressed. A smaller line shows the total number of keys pressed since power-up; the same key and count are printed to Serial. Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Connect the OLED SDA to A4 and SCL to A5. This sketch needs the **Keypad**, **Adafruit GFX**, and **Adafruit SSD1306** libraries.
+`bench/bench.ino` scans a 4x4 matrix and shows the last pressed key on the left side of the SSD1306 OLED. On the right it displays the total press count and the activity state below it. The states are `Nobody` after four seconds without a press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. It shows `Waiting` during the first four seconds after startup. The total count resets when the state first becomes `Nobody`. The key and total count are also printed to Serial. Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Connect the OLED SDA to A4 and SCL to A5. This sketch needs the **Keypad**, **Adafruit GFX**, and **Adafruit SSD1306** libraries.
 
 ## The reference build
 
@@ -90,6 +90,8 @@ Mr. Reasy's own bench sensors, lent to pairs whose simple sensor already works i
 
 Same rule as the shelf: the sensor gives a number and your State Table gives it a meaning. A radar `count` of 2 is two bodies in range, not a crowd that wants anything.
 
-States: 
-nothing - no keys are pressed
-on - keys are
+Keypad activity states:
+
+- `Nobody`: no key presses for at least 4 seconds.
+- `Visitor`: 1-2 key presses in the last 4 seconds.
+- `Omnipresent`: more than 2 key presses in the last 5 seconds.

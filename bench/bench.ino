@@ -1,4 +1,3 @@
-Work
 #include <Wire.h>
 #include <Keypad.h>
 #include <Adafruit_GFX.h>
@@ -8,18 +7,16 @@ Work
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
 
-Adafruit_SSD1306 display(
-  SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET
-);
+Adafruit_SSD1306 display{SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET};
 
 const byte ROWS = 4;
 const byte COLS = 4;
 
 char keys[ROWS][COLS] = {
-  {'D', '*', '0', '#'},
-  {'A', '1', '2', '3'},
-  {'B', '4', '5', '6'},
-  {'C', '7', '8', '9'}
+  {'7', '*', '1', '4'},
+  {'8', '0', '2', '5'},
+  {'9', '#', '3', '6'},
+  {'C', 'D', 'A', 'B'}
 };
 
 byte rowPins[ROWS] = {5, 4, 3, 2};
@@ -30,6 +27,90 @@ Keypad keypad = Keypad(
 );
 
 unsigned long keyPressCount = 0;
+const byte MAX_TRACKED_PRESS_EVENTS = 3;
+const unsigned long VISITOR_WINDOW_MS = 4000UL;
+const unsigned long OMNIPRESENT_WINDOW_MS = 5000UL;
+const unsigned long DISPLAY_REFRESH_MS = 250UL;
+
+unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
+byte pressHead = 0;
+byte pressCount = 0;
+unsigned long startupTime = 0;
+unsigned long lastDisplayTime = 0;
+char lastKey = '-';
+bool nobodyActive = false;
+
+void recordKeyPress(char key, unsigned long now) {
+  if (pressCount == MAX_TRACKED_PRESS_EVENTS) {
+    pressTimes[pressHead] = now;
+    pressHead = (pressHead + 1) % MAX_TRACKED_PRESS_EVENTS;
+  } else {
+    byte index = (pressHead + pressCount) % MAX_TRACKED_PRESS_EVENTS;
+    pressTimes[index] = now;
+    pressCount++;
+  }
+
+  keyPressCount++;
+  lastKey = key;
+}
+
+void pruneOldPresses(unsigned long now) {
+  while (pressCount > 0 &&
+         now - pressTimes[pressHead] >= OMNIPRESENT_WINDOW_MS) {
+    pressHead = (pressHead + 1) % MAX_TRACKED_PRESS_EVENTS;
+    pressCount--;
+  }
+}
+
+void drawActivity(unsigned long now) {
+  pruneOldPresses(now);
+
+  byte pressesInFourSeconds = 0;
+  byte pressesInFiveSeconds = 0;
+  for (byte i = 0; i < pressCount; i++) {
+    byte index = (pressHead + i) % MAX_TRACKED_PRESS_EVENTS;
+    unsigned long age = now - pressTimes[index];
+    if (age < VISITOR_WINDOW_MS) {
+      pressesInFourSeconds++;
+    }
+    pressesInFiveSeconds++;
+  }
+
+  const char *state;
+  bool isNobody = false;
+  if (pressesInFiveSeconds > 2) {
+    state = "Omnipresent";
+  } else if (pressesInFourSeconds > 0) {
+    state = "Visitor";
+  } else if (now - startupTime >= VISITOR_WINDOW_MS) {
+    state = "Nobody";
+    isNobody = true;
+  } else {
+    state = "Waiting";
+  }
+
+  if (isNobody && !nobodyActive) {
+    keyPressCount = 0;
+  }
+  nobodyActive = isNobody;
+
+  display.clearDisplay();
+  display.drawLine(38, 0, 38, SCREEN_HEIGHT - 1, SSD1306_WHITE);
+  display.setTextSize(3);
+  display.setCursor(8, 21);
+  display.write(lastKey);
+
+  display.setTextSize(1);
+  display.setCursor(45, 0);
+  display.print("Count:");
+  display.setCursor(45, 10);
+  display.print(keyPressCount);
+  display.setCursor(45, 24);
+  display.print("State:");
+  display.setCursor(45, 36);
+  display.print(state);
+  display.display();
+}
 
 void setup() {
   Serial.begin(9600);
@@ -39,39 +120,27 @@ void setup() {
     while (true) {}
   }
 
-  display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("Keypad ready!");
-  display.display();
-
+  startupTime = millis();
+  lastDisplayTime = startupTime;
+  drawActivity(startupTime);
   Serial.println("Keypad ready!");
 }
 
 void loop() {
   char key = keypad.getKey();
+  unsigned long now = millis();
 
   if (key) {
-    keyPressCount++;
+    recordKeyPress(key, now);
     Serial.print("Key pressed: ");
     Serial.print(key);
     Serial.print(" | Keys since boot: ");
     Serial.println(keyPressCount);
-
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.println("Key pressed:");
-
-    display.setTextSize(3);
-    display.setCursor(20, 25);
-    display.write(key);
-
-    display.setTextSize(1);
-    display.setCursor(0, 60);
-    display.print("Count: ");
-    display.print(keyPressCount);
-    display.display();
+    drawActivity(now);
+    lastDisplayTime = now;
+  } else if (now - lastDisplayTime >= DISPLAY_REFRESH_MS) {
+    drawActivity(now);
+    lastDisplayTime = now;
   }
 }
