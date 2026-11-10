@@ -10,17 +10,18 @@ U8G2_SSD1306_128X64_NONAME_1_SW_I2C petDisplay(
 
 const byte ROWS = 4;
 const byte COLS = 4;
+const byte GRAPH_BUCKETS = 20;
+const unsigned long GRAPH_BUCKET_MS = 250UL;
 
 char keys[ROWS][COLS] = {
-{'7', '*', '1', '4'},
-{'8', '0', '2', '5'},
-{'9', '#', '3', '6'},
-{'C', 'D', 'A', 'B'}
-};
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
 };
 
-byte rowPins[ROWS] = {5, 4, 3, 2};
-byte colPins[COLS] = {7, 6, 9, 8};
+byte rowPins[ROWS] = {2, 3, 4, 5};
+byte colPins[COLS] = {6, 7, 8, 9};
 
 Keypad keypad = Keypad(
   makeKeymap(keys), rowPins, colPins, ROWS, COLS
@@ -37,6 +38,7 @@ byte pressHead = 0;
 byte pressCount = 0;
 byte graphCurrentBucket = 0;
 unsigned long startupTime = 0;
+unsigned long graphBucketStart = 0;
 unsigned long lastKeyTime = 0;
 char lastKey = '-';
 bool nobodyActive = false;
@@ -138,7 +140,7 @@ void drawCharacter(const char *state, unsigned long now) {
   } while (petDisplay.nextPage());
 }
 
-void drawActivity(const char *state) {
+void drawActivity(const char *state, unsigned long now) {
   display.firstPage();
   do {
     display.drawLine(38, 0, 38, 63);
@@ -195,9 +197,13 @@ const char *updateActivityState(unsigned long now) {
 void setup() {
   Serial.begin(9600);
 
+  keypad.setDebounceTime(5);
+  display.setBusClock(400000);
+  petDisplay.setBusClock(400000);
   display.begin();
   petDisplay.begin();
   startupTime = millis();
+  graphBucketStart = startupTime;
   drawActivity("Waiting", startupTime);
   lastDisplayedState = "Waiting";
   Serial.println("Keypad ready!");
