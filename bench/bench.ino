@@ -29,7 +29,7 @@ unsigned long keyPressCount = 0;
 const byte MAX_TRACKED_PRESS_EVENTS = 12;
 const unsigned long VISITOR_WINDOW_MS = 4000UL;
 const unsigned long OMNIPRESENT_WINDOW_MS = 5000UL;
-const unsigned long GRAPH_REFRESH_MS = 250UL;
+const unsigned long GRAPH_REFRESH_MS = 1000UL;
 
 unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
 unsigned long pressGaps[MAX_TRACKED_PRESS_EVENTS];
@@ -118,7 +118,7 @@ void drawCharacter(unsigned long now) {
   } while (petDisplay.nextPage());
 }
 
-void drawActivity(const char *state, unsigned long now) {
+void drawActivity(const char *state) {
   display.firstPage();
   do {
     display.drawLine(38, 0, 38, 63);
@@ -134,8 +134,6 @@ void drawActivity(const char *state, unsigned long now) {
     display.drawStr(45, 36, "State:");
     display.drawStr(45, 51, state);
   } while (display.nextPage());
-
-  drawCharacter(now);
 }
 
 const char *updateActivityState(unsigned long now) {
@@ -179,7 +177,8 @@ void setup() {
   petDisplay.begin();
   startupTime = millis();
   lastGraphUpdate = startupTime;
-  drawActivity("Waiting", startupTime);
+  drawActivity("Waiting");
+  drawCharacter(startupTime);
   lastDisplayedState = "Waiting";
   Serial.println("Keypad ready!");
 }
@@ -207,7 +206,7 @@ void loop() {
       Serial.print("State: ");
       Serial.println(state);
     }
-    drawActivity(state, now);
+    drawActivity(state);
     lastDisplayedState = state;
     lastGraphUpdate = now;
   } else if (now - lastGraphUpdate >= GRAPH_REFRESH_MS) {
