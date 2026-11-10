@@ -32,9 +32,10 @@ const unsigned long VISITOR_WINDOW_MS = 4000UL;
 const unsigned long OMNIPRESENT_WINDOW_MS = 5000UL;
 
 unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
-unsigned long pressGaps[MAX_TRACKED_PRESS_EVENTS];
+byte graphPresses[GRAPH_BUCKETS] = {0};
 byte pressHead = 0;
 byte pressCount = 0;
+byte graphCurrentBucket = 0;
 unsigned long startupTime = 0;
 unsigned long lastKeyTime = 0;
 char lastKey = '-';
@@ -44,23 +45,42 @@ bool petWasReacting = false;
 const char *lastDisplayedState = "";
 
 void recordKeyPress(char key, unsigned long now) {
-  unsigned long gap = hasPressedKey ? now - lastKeyTime : 0;
-
   if (pressCount == MAX_TRACKED_PRESS_EVENTS) {
     pressTimes[pressHead] = now;
-    pressGaps[pressHead] = gap;
     pressHead = (pressHead + 1) % MAX_TRACKED_PRESS_EVENTS;
   } else {
     byte index = (pressHead + pressCount) % MAX_TRACKED_PRESS_EVENTS;
     pressTimes[index] = now;
-    pressGaps[index] = gap;
     pressCount++;
   }
 
+  if (graphPresses[graphCurrentBucket] < 255) {
+    graphPresses[graphCurrentBucket]++;
+  }
   keyPressCount++;
   lastKey = key;
   lastKeyTime = now;
   hasPressedKey = true;
+}
+
+void advanceGraphBuckets(unsigned long now) {
+  unsigned long elapsedBuckets = (now - graphBucketStart) / GRAPH_BUCKET_MS;
+  if (elapsedBuckets == 0) {
+    return;
+  }
+
+  if (elapsedBuckets >= GRAPH_BUCKETS) {
+    for (byte i = 0; i < GRAPH_BUCKETS; i++) {
+      graphPresses[i] = 0;
+    }
+    graphCurrentBucket = (graphCurrentBucket + elapsedBuckets) % GRAPH_BUCKETS;
+  } else {
+    for (unsigned long i = 0; i < elapsedBuckets; i++) {
+      graphCurrentBucket = (graphCurrentBucket + 1) % GRAPH_BUCKETS;
+      graphPresses[graphCurrentBucket] = 0;
+    }
+  }
+  graphBucketStart += elapsedBuckets * GRAPH_BUCKET_MS;
 }
 
 void pruneOldPresses(unsigned long now) {
@@ -186,6 +206,7 @@ void setup() {
 void loop() {
   char key = keypad.getKey();
   unsigned long now = millis();
+  advanceGraphBuckets(now);
   bool keyPressed = key != NO_KEY;
 
   if (keyPressed) {
