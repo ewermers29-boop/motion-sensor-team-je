@@ -27,11 +27,12 @@ Keypad keypad = Keypad(
 );
 
 unsigned long keyPressCount = 0;
-const byte MAX_TRACKED_PRESS_EVENTS = 3;
+const byte MAX_TRACKED_PRESS_EVENTS = 12;
 const unsigned long VISITOR_WINDOW_MS = 4000UL;
 const unsigned long OMNIPRESENT_WINDOW_MS = 5000UL;
 
 unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
+unsigned long pressGaps[MAX_TRACKED_PRESS_EVENTS];
 byte pressHead = 0;
 byte pressCount = 0;
 unsigned long startupTime = 0;
@@ -43,12 +44,16 @@ bool petWasReacting = false;
 const char *lastDisplayedState = "";
 
 void recordKeyPress(char key, unsigned long now) {
+  unsigned long gap = hasPressedKey ? now - lastKeyTime : 0;
+
   if (pressCount == MAX_TRACKED_PRESS_EVENTS) {
     pressTimes[pressHead] = now;
+    pressGaps[pressHead] = gap;
     pressHead = (pressHead + 1) % MAX_TRACKED_PRESS_EVENTS;
   } else {
     byte index = (pressHead + pressCount) % MAX_TRACKED_PRESS_EVENTS;
     pressTimes[index] = now;
+    pressGaps[index] = gap;
     pressCount++;
   }
 
