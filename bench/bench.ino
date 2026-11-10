@@ -5,17 +5,18 @@
 
 U8G2_SSD1306_128X64_NONAME_1_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
 U8G2_SSD1306_128X64_NONAME_1_SW_I2C petDisplay(
-  U8G2_R2, 10, 11, U8X8_PIN_NONE
+  U8G2_R0, 10, 11, U8X8_PIN_NONE
 );
 
 const byte ROWS = 4;
 const byte COLS = 4;
 
 char keys[ROWS][COLS] = {
-  {'7', '*', '1', '4'},
-  {'8', '0', '2', '5'},
-  {'9', '#', '3', '6'},
-  {'C', 'D', 'A', 'B'}
+{'7', '*', '1', '4'},
+{'8', '0', '2', '5'},
+{'9', '#', '3', '6'},
+{'C', 'D', 'A', 'B'}
+};
 };
 
 byte rowPins[ROWS] = {5, 4, 3, 2};
@@ -29,14 +30,12 @@ unsigned long keyPressCount = 0;
 const byte MAX_TRACKED_PRESS_EVENTS = 12;
 const unsigned long VISITOR_WINDOW_MS = 4000UL;
 const unsigned long OMNIPRESENT_WINDOW_MS = 5000UL;
-const unsigned long GRAPH_REFRESH_MS = 250UL;
 
 unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
 unsigned long pressGaps[MAX_TRACKED_PRESS_EVENTS];
 byte pressHead = 0;
 byte pressCount = 0;
 unsigned long startupTime = 0;
-unsigned long lastGraphUpdate = 0;
 unsigned long lastKeyTime = 0;
 char lastKey = '-';
 bool nobodyActive = false;
@@ -72,48 +71,49 @@ void pruneOldPresses(unsigned long now) {
   }
 }
 
-void drawCharacter(unsigned long now) {
+void drawCharacter(const char *state, unsigned long now) {
+  bool sleepy = strcmp(state, "Nobody") == 0;
+  bool excited = strcmp(state, "Omnipresent") == 0;
+  bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
+
   petDisplay.firstPage();
   do {
-    const int left = 10;
-    const int right = 126;
-    const int top = 8;
-    const int bottom = 58;
-    const int plotWidth = right - left;
-    const int plotHeight = bottom - top;
+    petDisplay.setFont(u8g2_font_6x12_tr);
+    int titleWidth = petDisplay.getStrWidth(state);
+    petDisplay.drawStr((128 - titleWidth) / 2, 11, state);
 
-    petDisplay.drawLine(left, top, left, bottom);
-    petDisplay.drawLine(left, bottom, right, bottom);
-    petDisplay.drawLine(left, top + plotHeight / 2, right, top + plotHeight / 2);
-    petDisplay.drawLine(left + plotWidth / 2, bottom - 2,
-                        left + plotWidth / 2, bottom + 2);
-    petDisplay.drawLine(right, bottom - 2, right, bottom + 2);
+    petDisplay.drawCircle(64, 39, 23);
+    if (sleepy) {
+      petDisplay.drawLine(51, 34, 59, 34);
+      petDisplay.drawLine(69, 34, 77, 34);
+      petDisplay.drawStr(92, 25, "Z");
+    } else if (excited) {
+      petDisplay.drawCircle(55, 33, 5);
+      petDisplay.drawCircle(73, 33, 5);
+      petDisplay.drawDisc(55, 33, 2);
+      petDisplay.drawDisc(73, 33, 2);
+    } else {
+      petDisplay.drawDisc(55, 34, 3);
+      petDisplay.drawDisc(73, 34, 3);
+    }
 
-    bool havePreviousPoint = false;
-    int previousX = 0;
-    int previousY = 0;
-    for (byte i = 0; i < pressCount; i++) {
-      byte index = (pressHead + i) % MAX_TRACKED_PRESS_EVENTS;
-      unsigned long age = now - pressTimes[index];
-      if (age >= OMNIPRESENT_WINDOW_MS) {
-        continue;
-      }
+    if (sleepy) {
+      petDisplay.drawLine(59, 49, 69, 49);
+    } else if (excited) {
+      petDisplay.drawLine(54, 46, 64, 53);
+      petDisplay.drawLine(64, 53, 74, 46);
+    } else {
+      petDisplay.drawLine(57, 47, 64, 51);
+      petDisplay.drawLine(64, 51, 71, 47);
+    }
 
-      int x = right - (int)(age * plotWidth / OMNIPRESENT_WINDOW_MS);
-      unsigned long gap = pressGaps[index];
-      if (gap > OMNIPRESENT_WINDOW_MS) {
-        gap = OMNIPRESENT_WINDOW_MS;
-      }
-      int y = bottom - (int)(gap * plotHeight / OMNIPRESENT_WINDOW_MS);
-
-      petDisplay.drawLine(x, bottom, x, y);
-      petDisplay.drawDisc(x, y, 2);
-      if (havePreviousPoint) {
-        petDisplay.drawLine(previousX, previousY, x, y);
-      }
-      previousX = x;
-      previousY = y;
-      havePreviousPoint = true;
+    if (reacting) {
+      petDisplay.drawStr(91, 39, "!");
+    }
+    if (hasPressedKey) {
+      char keyLabel[] = "Key: X";
+      keyLabel[5] = lastKey;
+      petDisplay.drawStr(0, 63, keyLabel);
     }
   } while (petDisplay.nextPage());
 }
@@ -135,7 +135,7 @@ void drawActivity(const char *state, unsigned long now) {
     display.drawStr(45, 51, state);
   } while (display.nextPage());
 
-  drawCharacter(now);
+  drawCharacter(state, now);
 }
 
 const char *updateActivityState(unsigned long now) {
@@ -178,7 +178,6 @@ void setup() {
   display.begin();
   petDisplay.begin();
   startupTime = millis();
-  lastGraphUpdate = startupTime;
   drawActivity("Waiting", startupTime);
   lastDisplayedState = "Waiting";
   Serial.println("Keypad ready!");
@@ -203,16 +202,8 @@ void loop() {
   bool reactionEnded = petWasReacting && !reacting;
 
   if (keyPressed || stateChanged || reactionEnded) {
-    if (stateChanged) {
-      Serial.print("State: ");
-      Serial.println(state);
-    }
     drawActivity(state, now);
     lastDisplayedState = state;
-    lastGraphUpdate = now;
-  } else if (now - lastGraphUpdate >= GRAPH_REFRESH_MS) {
-    drawCharacter(now);
-    lastGraphUpdate = now;
   }
   petWasReacting = reacting;
 }
