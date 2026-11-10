@@ -32,6 +32,7 @@ const unsigned long OMNIPRESENT_WINDOW_MS = 5000UL;
 const byte GRAPH_BUCKETS = 10;
 const byte GRAPH_MAX_PRESSES_PER_SECOND = 5;
 const unsigned long GRAPH_BUCKET_MS = 1000UL;
+const unsigned long ACTIVITY_REFRESH_MS = 500UL;
 const unsigned long GRAPH_REFRESH_MS = 500UL;
 
 unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
@@ -41,6 +42,7 @@ byte pressCount = 0;
 byte graphCurrentBucket = 0;
 unsigned long startupTime = 0;
 unsigned long graphBucketStart = 0;
+unsigned long lastActivityUpdate = 0;
 unsigned long lastGraphUpdate = 0;
 unsigned long lastKeyTime = 0;
 char lastKey = '-';
@@ -204,6 +206,7 @@ void setup() {
   petDisplay.begin();
   startupTime = millis();
   graphBucketStart = startupTime;
+  lastActivityUpdate = startupTime;
   lastGraphUpdate = startupTime;
   drawActivity("Waiting");
   drawCharacter();
@@ -230,13 +233,15 @@ void loop() {
   bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
   bool reactionEnded = petWasReacting && !reacting;
 
-  if (keyPressed || stateChanged || reactionEnded) {
+  if (keyPressed || stateChanged || reactionEnded ||
+      now - lastActivityUpdate >= ACTIVITY_REFRESH_MS) {
     if (stateChanged) {
       Serial.print("State: ");
       Serial.println(state);
     }
     drawActivity(state);
     lastDisplayedState = state;
+    lastActivityUpdate = now;
   }
   if (now - lastGraphUpdate >= GRAPH_REFRESH_MS) {
     drawCharacter();
