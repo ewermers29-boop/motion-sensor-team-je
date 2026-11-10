@@ -118,7 +118,7 @@ void drawCharacter(const char *state, unsigned long now) {
   } while (petDisplay.nextPage());
 }
 
-void drawActivity(const char *state, unsigned long now) {
+void drawActivity(const char *state) {
   display.firstPage();
   do {
     display.drawLine(38, 0, 38, 63);
