@@ -39,10 +39,10 @@ byte graphCurrentBucket = 0;
 unsigned long startupTime = 0;
 unsigned long lastKeyTime = 0;
 char lastKey = '-';
-bool nobodyActive = false;
 bool hasPressedKey = false;
 bool petWasReacting = false;
 const char *lastDisplayedState = "";
+unsigned long lastDisplayedCount = 0;
 
 void recordKeyPress(char key, unsigned long now) {
   if (pressCount == MAX_TRACKED_PRESS_EVENTS) {
@@ -81,6 +81,22 @@ void advanceGraphBuckets(unsigned long now) {
     }
   }
   graphBucketStart += elapsedBuckets * GRAPH_BUCKET_MS;
+}
+
+bool captureKeyPress() {
+  char key = keypad.getKey();
+  if (key == NO_KEY) {
+    return false;
+  }
+
+  unsigned long now = millis();
+  advanceGraphBuckets(now);
+  recordKeyPress(key, now);
+  Serial.print("Key pressed: ");
+  Serial.print(key);
+  Serial.print(" | Keys since boot: ");
+  Serial.println(keyPressCount);
+  return true;
 }
 
 void pruneOldPresses(unsigned long now) {
@@ -136,6 +152,7 @@ void drawCharacter(const char *state, unsigned long now) {
       petDisplay.drawStr(0, 63, keyLabel);
     }
   } while (petDisplay.nextPage());
+  return keyPressed;
 }
 
 void drawActivity(const char *state) {
@@ -185,10 +202,6 @@ const char *updateActivityState(unsigned long now) {
     state = "Waiting";
   }
 
-  if (isNobody && !nobodyActive) {
-    keyPressCount = 0;
-  }
-  nobodyActive = isNobody;
   return state;
 }
 
@@ -204,21 +217,19 @@ void setup() {
 }
 
 void loop() {
-  char key = keypad.getKey();
   unsigned long now = millis();
   advanceGraphBuckets(now);
-  bool keyPressed = key != NO_KEY;
-
-  if (keyPressed) {
-    recordKeyPress(key, now);
-    Serial.print("Key pressed: ");
-    Serial.print(key);
-    Serial.print(" | Keys since boot: ");
-    Serial.println(keyPressCount);
+  bool keyPressed = captureKeyPress();
+  if (now - lastGraphUpdate >= GRAPH_REFRESH_MS) {
+    keyPressed = drawCharacter() || keyPressed;
+    lastGraphUpdate = millis();
   }
 
+  now = millis();
+  advanceGraphBuckets(now);
   const char *state = updateActivityState(now);
   bool stateChanged = strcmp(state, lastDisplayedState) != 0;
+  bool countChanged = keyPressCount != lastDisplayedCount;
   bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
   bool reactionEnded = petWasReacting && !reacting;
 
