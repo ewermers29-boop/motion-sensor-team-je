@@ -10,13 +10,18 @@ U8G2_SSD1306_128X64_NONAME_1_SW_I2C petDisplay(
 
 const byte ROWS = 4;
 const byte COLS = 4;
+const byte GRAPH_BUCKETS = 12;
+const unsigned long GRAPH_BUCKET_MS = 500UL;
+const byte TRIG_PIN = A0;
+const byte ECHO_PIN = A1;
+const unsigned long SENSOR_INTERVAL_MS = 100UL;
+const unsigned long ECHO_TIMEOUT_US = 30000UL;
 
 char keys[ROWS][COLS] = {
-{'7', '*', '1', '4'},
-{'8', '0', '2', '5'},
-{'9', '#', '3', '6'},
-{'C', 'D', 'A', 'B'}
-};
+  {'7', '*', '1', '4'},
+  {'8', '0', '2', '5'},
+  {'9', '#', '3', '6'},
+  {'C', 'D', 'A', 'B'}
 };
 
 byte rowPins[ROWS] = {5, 4, 3, 2};
@@ -37,7 +42,10 @@ byte pressHead = 0;
 byte pressCount = 0;
 byte graphCurrentBucket = 0;
 unsigned long startupTime = 0;
+unsigned long graphBucketStart = 0;
+unsigned long lastSensorRead = 0;
 unsigned long lastKeyTime = 0;
+float distanceCm = -1.0;
 char lastKey = '-';
 bool nobodyActive = false;
 bool hasPressedKey = false;
@@ -91,6 +99,17 @@ void pruneOldPresses(unsigned long now) {
   }
 }
 
+float readDistanceCm() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  unsigned long duration = pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
+  return duration ? duration / 58.0 : -1.0;
+}
+
 void drawCharacter(const char *state, unsigned long now) {
   bool sleepy = strcmp(state, "Nobody") == 0;
   bool excited = strcmp(state, "Omnipresent") == 0;
@@ -100,45 +119,54 @@ void drawCharacter(const char *state, unsigned long now) {
   do {
     petDisplay.setFont(u8g2_font_6x12_tr);
     int titleWidth = petDisplay.getStrWidth(state);
-    petDisplay.drawStr((128 - titleWidth) / 2, 11, state);
+    petDisplay.drawStr((78 - titleWidth) / 2, 11, state);
+    petDisplay.drawStr(0, 27, "US-025A");
+    petDisplay.drawLine(79, 16, 79, 63);
 
-    petDisplay.drawCircle(64, 39, 23);
-    if (sleepy) {
-      petDisplay.drawLine(51, 34, 59, 34);
-      petDisplay.drawLine(69, 34, 77, 34);
-      petDisplay.drawStr(92, 25, "Z");
-    } else if (excited) {
-      petDisplay.drawCircle(55, 33, 5);
-      petDisplay.drawCircle(73, 33, 5);
-      petDisplay.drawDisc(55, 33, 2);
-      petDisplay.drawDisc(73, 33, 2);
+    char distanceLabel[8];
+    if (distanceCm < 0) {
+      strcpy(distanceLabel, "---");
     } else {
-      petDisplay.drawDisc(55, 34, 3);
-      petDisplay.drawDisc(73, 34, 3);
+      dtostrf(distanceCm, 0, 1, distanceLabel);
+    }
+    petDisplay.setFont(u8g2_font_9x18B_tr);
+    petDisplay.drawStr(0, 52, distanceLabel);
+    int labelWidth = petDisplay.getStrWidth(distanceLabel);
+    petDisplay.setFont(u8g2_font_5x8_tr);
+    petDisplay.drawStr(labelWidth + 2, 52, "cm");
+
+    petDisplay.drawCircle(103, 40, 17);
+    if (sleepy) {
+      petDisplay.drawLine(95, 37, 99, 37);
+      petDisplay.drawLine(107, 37, 111, 37);
+      petDisplay.drawStr(119, 26, "Z");
+    } else if (excited) {
+      petDisplay.drawCircle(97, 35, 3);
+      petDisplay.drawCircle(109, 35, 3);
+      petDisplay.drawDisc(97, 35, 1);
+      petDisplay.drawDisc(109, 35, 1);
+    } else {
+      petDisplay.drawDisc(97, 36, 2);
+      petDisplay.drawDisc(109, 36, 2);
     }
 
     if (sleepy) {
-      petDisplay.drawLine(59, 49, 69, 49);
+      petDisplay.drawLine(99, 47, 107, 47);
     } else if (excited) {
-      petDisplay.drawLine(54, 46, 64, 53);
-      petDisplay.drawLine(64, 53, 74, 46);
+      petDisplay.drawLine(96, 45, 103, 51);
+      petDisplay.drawLine(103, 51, 110, 45);
     } else {
-      petDisplay.drawLine(57, 47, 64, 51);
-      petDisplay.drawLine(64, 51, 71, 47);
+      petDisplay.drawLine(98, 46, 103, 49);
+      petDisplay.drawLine(103, 49, 108, 46);
     }
 
     if (reacting) {
-      petDisplay.drawStr(91, 39, "!");
-    }
-    if (hasPressedKey) {
-      char keyLabel[] = "Key: X";
-      keyLabel[5] = lastKey;
-      petDisplay.drawStr(0, 63, keyLabel);
+      petDisplay.drawStr(117, 41, "!");
     }
   } while (petDisplay.nextPage());
 }
 
-void drawActivity(const char *state) {
+void drawActivity(const char *state, unsigned long now) {
   display.firstPage();
   do {
     display.drawLine(38, 0, 38, 63);
@@ -197,7 +225,10 @@ void setup() {
 
   display.begin();
   petDisplay.begin();
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
   startupTime = millis();
+  graphBucketStart = startupTime;
   drawActivity("Waiting", startupTime);
   lastDisplayedState = "Waiting";
   Serial.println("Keypad ready!");
@@ -207,6 +238,12 @@ void loop() {
   char key = keypad.getKey();
   unsigned long now = millis();
   advanceGraphBuckets(now);
+  bool sensorUpdated = false;
+  if (now - lastSensorRead >= SENSOR_INTERVAL_MS) {
+    distanceCm = readDistanceCm();
+    lastSensorRead = now;
+    sensorUpdated = true;
+  }
   bool keyPressed = key != NO_KEY;
 
   if (keyPressed) {
@@ -222,9 +259,11 @@ void loop() {
   bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
   bool reactionEnded = petWasReacting && !reacting;
 
-  if (keyPressed || stateChanged || reactionEnded) {
+  if (keyPressed || stateChanged) {
     drawActivity(state, now);
     lastDisplayedState = state;
+  } else if (sensorUpdated || reactionEnded) {
+    drawCharacter(state, now);
   }
   petWasReacting = reacting;
 }
