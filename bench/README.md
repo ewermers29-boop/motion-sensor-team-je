@@ -10,13 +10,13 @@ The kits come apart, so building the circuit is part of your work.
 
 1. A Nano, a breadboard and jumpers from the north racks in the Innovation Commons. If the Nano's header pins aren't soldered yet, that comes first. Ask Mr. Reasy before you heat an iron.
 2. Two sensors on the one Nano, one per partner. Wire each one and check it in the Arduino IDE's Serial Monitor at 115200 before the browser sees it.
-3. For the HC-SR04 sample, flash `bench/oled_demo/oled_demo.ino`. To try the keypad, flash `bench/bench.ino`; it is a separate keypad-only sketch.
+3. For the HC-SR04 sample, flash `bench/oled_demo/oled_demo.ino`. To try the keypad with a second US-025A ultrasonic sensor, flash `bench/bench.ino`.
 
 ## The keypad sketch
 
-`bench/bench.ino` scans a 4x4 matrix. The original SSD1306 OLED shows the last pressed key, total press count, and activity state. A second SSD1306 OLED shows a character that gets sleepy in `Nobody`, wakes up in `Visitor`, and gets excited in `Omnipresent`; it also reacts briefly to each keypress. The states are `Nobody` after four seconds without a press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. The total count resets when the state first becomes `Nobody`; the sketch shows `Waiting` during the first four seconds after startup.
+`bench/bench.ino` scans a 4x4 matrix and reads a US-025A ultrasonic sensor. The original SSD1306 OLED shows the last pressed key, total press count, and activity state. The second SSD1306 OLED shows the ultrasonic distance in centimetres (or `---` when there is no echo), alongside a character that gets sleepy in `Nobody`, wakes up in `Visitor`, and gets excited in `Omnipresent`; it also reacts briefly to each keypress. The states are `Nobody` after four seconds without a press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. The total count resets when the state first becomes `Nobody`; the sketch shows `Waiting` during the first four seconds after startup.
 
-Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Keep the original OLED connected to SDA A4 and SCL A5. Connect the character OLED's SDA to D11 and SCL to D10. Both OLEDs share 5V and GND. The separate software-I2C pins let both screens use the same I2C address. Both displays use U8g2's page-buffered mode to reduce Nano memory use. This sketch needs the **Keypad** and **U8g2** libraries.
+Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Connect the US-025A's VCC to 5V, GND to GND, TRIG to A0, and ECHO to A1. Keep the original OLED connected to SDA A4 and SCL A5. Connect the second OLED's SDA to D11 and SCL to D10. Both OLEDs and the sensor share 5V and GND. The separate software-I2C pins let both screens use the same I2C address. Both displays use U8g2's page-buffered mode to reduce Nano memory use. This sketch needs the **Keypad** and **U8g2** libraries.
 
 ## The reference build
 
@@ -59,7 +59,7 @@ Flash `bench/oled_demo/oled_demo.ino` for the sensor reference build. Open `benc
 
 ### The keypad (in progress)
 
-The keypad is still not working correctly, and keypad support is in progress. It is not ready to rely on yet; use the existing sensor and browser workflow for now.
+The keypad is still not working correctly, and keypad support is in progress. The US-025A readout can be tested on the second OLED, but use the existing sensor and browser workflow for your piece for now.
 
 ## What's on the shelf
 

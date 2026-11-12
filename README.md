@@ -59,7 +59,7 @@ The bench track swaps the sense layer and nothing else. `piece.js` and `fake-sen
 3. Click **Connect the Arduino** and pick the board. Press **D** to see the raw line and your signals.
 4. Your State Table lives in **`bench/table-bench.js`** (same format as `table.js`). Your signal is a function in `SIGNALS` in `bench/sense-serial.js`: it gets the latest reading (`{ cm: 42.5 }`) and returns 0 to 1. Add the sensor to the sketch's printed line, then its function, then its name in `bench/table-bench.js`.
 
-For a keypad-only exercise, `bench/bench.ino` reads a 4x4 matrix and keeps the last pressed key on an SSD1306 OLED. Its wiring and library requirements are in `bench/README.md`.
+For a keypad and second ultrasonic sensor exercise, `bench/bench.ino` reads a 4x4 matrix and shows the US-025A distance on a second SSD1306 OLED. Its wiring and library requirements are in `bench/README.md`.
 
 ## What stays in the browser
 
