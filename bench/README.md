@@ -14,7 +14,7 @@ The kits come apart, so building the circuit is part of your work.
 
 ## The keypad sketch
 
-`bench/bench.ino` scans a 4x4 matrix. The original SSD1306 OLED shows the last pressed key, total press count since startup, and activity state. The second OLED uses the default orientation and displays a rolling graph: the horizontal axis is the last ten seconds, and the vertical axis is key presses per second (shown from 0 to 5). It refreshes twice per second without tying graph redraws to first-screen key updates. The states are `Nobody` after four seconds without a press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. The sketch shows `Waiting` during the first four seconds after startup.
+`bench/bench.ino` scans a 4x4 matrix. The original SSD1306 OLED shows the last pressed key, total press count since startup, and activity state. The second OLED displays a rolling graph rotated 180 degrees: the horizontal axis runs from now on the left to ten seconds ago on the right, and the vertical axis shows key presses per second from 0 at the top to 5 at the bottom. It refreshes twice per second and scans the keypad between graph pages so graph drawing does not prevent keypress detection. The states are `Nobody` after four seconds without a press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. The sketch shows `Waiting` during the first four seconds after startup.
 
 Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Keep the original OLED connected to SDA A4 and SCL A5. Connect the character OLED's SDA to D11 and SCL to D10. Both OLEDs share 5V and GND. The separate software-I2C pins let both screens use the same I2C address. Both displays use U8g2's page-buffered mode to reduce Nano memory use. This sketch needs the **Keypad** and **U8g2** libraries.
 
@@ -57,9 +57,9 @@ Flash `bench/oled_demo/oled_demo.ino` for the sensor reference build. Open `benc
 
 *Three states, three thresholds: EMPTY when nothing echoes back (this photo predates the fix that shows `---` instead of 400), HERE closer than 120 cm, NEAR closer than 30 cm. That's a State Table, drawn on a screen. Yours will have different words and different numbers.* The screen's badge thresholds are for the screen only; your real State Table still lives in the browser. It's an extra for after the sensor works, never instead of it.
 
-### The keypad (in progress)
+### The keypad exercise
 
-The keypad is still not working correctly, and keypad support is in progress. It is not ready to rely on yet; use the existing sensor and browser workflow for now.
+The separate `bench/bench.ino` keypad sketch shows the last key, press count and activity state on one OLED, and a 10-second activity graph on the second OLED. See [The keypad sketch](#the-keypad-sketch) for the wiring and display behavior.
 
 ## What's on the shelf
 
