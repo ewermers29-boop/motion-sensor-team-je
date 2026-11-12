@@ -46,10 +46,10 @@ unsigned long lastActivityUpdate = 0;
 unsigned long lastGraphUpdate = 0;
 unsigned long lastKeyTime = 0;
 char lastKey = '-';
-bool nobodyActive = false;
 bool hasPressedKey = false;
 bool petWasReacting = false;
 const char *lastDisplayedState = "";
+unsigned long lastDisplayedCount = 0;
 
 void recordKeyPress(char key, unsigned long now) {
   if (pressCount == MAX_TRACKED_PRESS_EVENTS) {
@@ -192,10 +192,6 @@ const char *updateActivityState(unsigned long now) {
     state = "Waiting";
   }
 
-  if (isNobody && !nobodyActive) {
-    keyPressCount = 0;
-  }
-  nobodyActive = isNobody;
   return state;
 }
 
@@ -230,10 +226,11 @@ void loop() {
 
   const char *state = updateActivityState(now);
   bool stateChanged = strcmp(state, lastDisplayedState) != 0;
+  bool countChanged = keyPressCount != lastDisplayedCount;
   bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
   bool reactionEnded = petWasReacting && !reacting;
 
-  if (keyPressed || stateChanged || reactionEnded ||
+  if (keyPressed || countChanged || stateChanged || reactionEnded ||
       now - lastActivityUpdate >= ACTIVITY_REFRESH_MS) {
     if (stateChanged) {
       Serial.print("State: ");
@@ -241,6 +238,7 @@ void loop() {
     }
     drawActivity(state);
     lastDisplayedState = state;
+    lastDisplayedCount = keyPressCount;
     lastActivityUpdate = now;
   }
   if (now - lastGraphUpdate >= GRAPH_REFRESH_MS) {
