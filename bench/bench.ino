@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <Keypad.h>
 #include <U8g2lib.h>
+#include <stdio.h>
 #include <string.h>
 
 U8G2_SSD1306_128X64_NONAME_1_HW_I2C display(U8G2_R0, U8X8_PIN_NONE);
@@ -37,21 +38,24 @@ Keypad keypad = Keypad(
   makeKeymap(keys), rowPins, colPins, ROWS, COLS
 );
 
+const byte TRIG_PIN = A1;
+const byte ECHO_PIN = A0;
+const unsigned long ECHO_TIMEOUT_US = 2000UL;
+const unsigned long SENSOR_REFRESH_MS = 100UL;
+const unsigned long STATUS_DISPLAY_REFRESH_MS = 1000UL;
+const unsigned long SENSOR_DEBUG_REFRESH_MS = 1000UL;
+const float MAX_DETECTION_DISTANCE_CM = 12.0;
+const byte NO_DETECTION_READINGS_TO_FLAG = 3;
+
 unsigned long keyPressCount = 0;
 const byte MAX_TRACKED_PRESS_EVENTS = 12;
 const unsigned long VISITOR_WINDOW_MS = 4000UL;
 const unsigned long OMNIPRESENT_WINDOW_MS = 5000UL;
-const byte GRAPH_BUCKETS = 10;
-const byte GRAPH_MAX_PRESSES_PER_SECOND = 5;
-const unsigned long GRAPH_BUCKET_MS = 1000UL;
 const unsigned long ACTIVITY_REFRESH_MS = 500UL;
-const unsigned long GRAPH_REFRESH_MS = 500UL;
 
 unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
-byte graphPresses[GRAPH_BUCKETS] = {0};
 byte pressHead = 0;
 byte pressCount = 0;
-byte graphCurrentBucket = 0;
 unsigned long startupTime = 0;
 unsigned long graphBucketStart = 0;
 unsigned long lastSensorRead = 0;
@@ -66,6 +70,11 @@ bool hasPressedKey = false;
 bool petWasReacting = false;
 const char *lastDisplayedState = "";
 unsigned long lastDisplayedCount = 0;
+const char *machineStatus = "CHECKING";
+byte consecutiveNoDetectionReadings = 0;
+unsigned long latestEchoDurationUs = 0;
+float latestDistanceCm = 0;
+bool latestObjectDetected = false;
 
 void recordKeyPress(char key, unsigned long now) {
   if (pressCount == MAX_TRACKED_PRESS_EVENTS) {
@@ -77,43 +86,19 @@ void recordKeyPress(char key, unsigned long now) {
     pressCount++;
   }
 
-  if (graphPresses[graphCurrentBucket] < 255) {
-    graphPresses[graphCurrentBucket]++;
-  }
   keyPressCount++;
   lastKey = key;
   lastKeyTime = now;
   hasPressedKey = true;
 }
 
-void advanceGraphBuckets(unsigned long now) {
-  unsigned long elapsedBuckets = (now - graphBucketStart) / GRAPH_BUCKET_MS;
-  if (elapsedBuckets == 0) {
-    return;
-  }
-
-  if (elapsedBuckets >= GRAPH_BUCKETS) {
-    for (byte i = 0; i < GRAPH_BUCKETS; i++) {
-      graphPresses[i] = 0;
-    }
-    graphCurrentBucket = (graphCurrentBucket + elapsedBuckets) % GRAPH_BUCKETS;
-  } else {
-    for (unsigned long i = 0; i < elapsedBuckets; i++) {
-      graphCurrentBucket = (graphCurrentBucket + 1) % GRAPH_BUCKETS;
-      graphPresses[graphCurrentBucket] = 0;
-    }
-  }
-  graphBucketStart += elapsedBuckets * GRAPH_BUCKET_MS;
-}
-
-bool captureKeyPress() {
+bool captureKeyPress(bool sensorResponsive) {
   char key = keypad.getKey();
-  if (key == NO_KEY) {
+  if (key == NO_KEY || !sensorResponsive) {
     return false;
   }
 
   unsigned long now = millis();
-  advanceGraphBuckets(now);
   recordKeyPress(key, now);
   Serial.print("Key pressed: ");
   Serial.print(key);
@@ -225,8 +210,28 @@ void drawCharacter(const char *state, unsigned long now) {
     if (reacting) {
       petDisplay.drawStr(117, 41, "!");
     }
-  } while (petDisplay.nextPage());
-  return keyPressed;
+    Serial.print("Machine: ");
+    Serial.println(machineStatus);
+  }
+  if (statusChanged || now - lastStatusDisplay >= STATUS_DISPLAY_REFRESH_MS) {
+    drawMachineStatus();
+    lastStatusDisplay = now;
+  }
+  if (now - lastSensorDebug >= SENSOR_DEBUG_REFRESH_MS) {
+    Serial.print("Ultrasonic echo: ");
+    Serial.print(latestEchoDurationUs);
+    Serial.print(" us");
+    if (echoReceived) {
+      Serial.print(" | ");
+      Serial.print(latestDistanceCm, 1);
+      Serial.print(" cm | ");
+      Serial.println(latestObjectDetected ? "target detected" : "too far");
+    } else {
+      Serial.println(" | no echo");
+    }
+    lastSensorDebug = now;
+  }
+  lastSensorRead = now;
 }
 
 void drawActivity(const char *state, unsigned long now) {
@@ -280,6 +285,8 @@ const char *updateActivityState(unsigned long now) {
 void setup() {
   Serial.begin(9600);
 
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
   display.begin();
   petDisplay.begin();
   pinMode(TRIG_PIN, OUTPUT);
@@ -344,7 +351,6 @@ void loop() {
   }
 
   now = millis();
-  advanceGraphBuckets(now);
   const char *state = updateActivityState(now);
   bool stateChanged = strcmp(state, lastDisplayedState) != 0;
   bool countChanged = keyPressCount != lastDisplayedCount;
