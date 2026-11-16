@@ -12,6 +12,7 @@ const byte ROWS = 4;
 const byte COLS = 4;
 const byte GRAPH_BUCKETS = 12;
 const unsigned long GRAPH_BUCKET_MS = 500UL;
+const byte PIR_PIN = 12;
 const byte TRIG_PIN = A0;
 const byte ECHO_PIN = A1;
 const unsigned long SENSOR_INTERVAL_MS = 100UL;
@@ -46,6 +47,7 @@ unsigned long graphBucketStart = 0;
 unsigned long lastSensorRead = 0;
 unsigned long lastKeyTime = 0;
 float distanceCm = -1.0;
+bool systemActive = false;
 char lastKey = '-';
 bool nobodyActive = false;
 bool hasPressedKey = false;
@@ -225,18 +227,24 @@ void setup() {
 
   display.begin();
   petDisplay.begin();
+  pinMode(PIR_PIN, INPUT);
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
-  startupTime = millis();
-  graphBucketStart = startupTime;
-  drawActivity("Waiting", startupTime);
-  lastDisplayedState = "Waiting";
+  graphBucketStart = millis();
+  drawActivity("PIR armed", graphBucketStart);
+  lastDisplayedState = "PIR armed";
   Serial.println("Keypad ready!");
 }
 
 void loop() {
-  char key = keypad.getKey();
   unsigned long now = millis();
+  if (!systemActive && digitalRead(PIR_PIN) == HIGH) {
+    systemActive = true;
+    startupTime = now;
+    Serial.println("PIR motion detected; keypad enabled.");
+  }
+
+  char key = systemActive ? keypad.getKey() : NO_KEY;
   advanceGraphBuckets(now);
   bool sensorUpdated = false;
   if (now - lastSensorRead >= SENSOR_INTERVAL_MS) {
@@ -254,7 +262,7 @@ void loop() {
     Serial.println(keyPressCount);
   }
 
-  const char *state = updateActivityState(now);
+  const char *state = systemActive ? updateActivityState(now) : "PIR armed";
   bool stateChanged = strcmp(state, lastDisplayedState) != 0;
   bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
   bool reactionEnded = petWasReacting && !reacting;
