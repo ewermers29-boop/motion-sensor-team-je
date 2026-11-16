@@ -33,7 +33,7 @@ function clamp(x) {
   return Math.min(1, Math.max(0, x));
 }
 
-const SMOOTHING = 0.25;
+const SMOOTHING = 0.55;
 
 // ---- The State Table, applied (the same as sense.js) -------------------------
 

@@ -35,6 +35,11 @@ unsigned long keyPressCount = 0;
 const byte MAX_TRACKED_PRESS_EVENTS = 12;
 const unsigned long VISITOR_WINDOW_MS = 4000UL;
 const unsigned long OMNIPRESENT_WINDOW_MS = 5000UL;
+const byte GRAPH_BUCKETS = 10;
+const byte GRAPH_MAX_PRESSES_PER_SECOND = 5;
+const unsigned long GRAPH_BUCKET_MS = 1000UL;
+const unsigned long ACTIVITY_REFRESH_MS = 500UL;
+const unsigned long GRAPH_REFRESH_MS = 500UL;
 
 unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
 byte graphPresses[GRAPH_BUCKETS] = {0};
@@ -47,10 +52,10 @@ unsigned long lastSensorRead = 0;
 unsigned long lastKeyTime = 0;
 float distanceCm = -1.0;
 char lastKey = '-';
-bool nobodyActive = false;
 bool hasPressedKey = false;
 bool petWasReacting = false;
 const char *lastDisplayedState = "";
+unsigned long lastDisplayedCount = 0;
 
 void recordKeyPress(char key, unsigned long now) {
   if (pressCount == MAX_TRACKED_PRESS_EVENTS) {
@@ -89,6 +94,22 @@ void advanceGraphBuckets(unsigned long now) {
     }
   }
   graphBucketStart += elapsedBuckets * GRAPH_BUCKET_MS;
+}
+
+bool captureKeyPress() {
+  char key = keypad.getKey();
+  if (key == NO_KEY) {
+    return false;
+  }
+
+  unsigned long now = millis();
+  advanceGraphBuckets(now);
+  recordKeyPress(key, now);
+  Serial.print("Key pressed: ");
+  Serial.print(key);
+  Serial.print(" | Keys since boot: ");
+  Serial.println(keyPressCount);
+  return true;
 }
 
 void pruneOldPresses(unsigned long now) {
@@ -164,6 +185,7 @@ void drawCharacter(const char *state, unsigned long now) {
       petDisplay.drawStr(117, 41, "!");
     }
   } while (petDisplay.nextPage());
+  return keyPressed;
 }
 
 void drawActivity(const char *state, unsigned long now) {
@@ -182,8 +204,6 @@ void drawActivity(const char *state, unsigned long now) {
     display.drawStr(45, 36, "State:");
     display.drawStr(45, 51, state);
   } while (display.nextPage());
-
-  drawCharacter(state, now);
 }
 
 const char *updateActivityState(unsigned long now) {
@@ -213,10 +233,6 @@ const char *updateActivityState(unsigned long now) {
     state = "Waiting";
   }
 
-  if (isNobody && !nobodyActive) {
-    keyPressCount = 0;
-  }
-  nobodyActive = isNobody;
   return state;
 }
 
@@ -235,7 +251,6 @@ void setup() {
 }
 
 void loop() {
-  char key = keypad.getKey();
   unsigned long now = millis();
   advanceGraphBuckets(now);
   bool sensorUpdated = false;
@@ -254,8 +269,11 @@ void loop() {
     Serial.println(keyPressCount);
   }
 
+  now = millis();
+  advanceGraphBuckets(now);
   const char *state = updateActivityState(now);
   bool stateChanged = strcmp(state, lastDisplayedState) != 0;
+  bool countChanged = keyPressCount != lastDisplayedCount;
   bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
   bool reactionEnded = petWasReacting && !reacting;
 
