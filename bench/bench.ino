@@ -10,12 +10,18 @@ U8G2_SSD1306_128X64_NONAME_1_SW_I2C petDisplay(
 
 const byte ROWS = 4;
 const byte COLS = 4;
+const byte GRAPH_BUCKETS = 12;
+const unsigned long GRAPH_BUCKET_MS = 500UL;
+const byte TRIG_PIN = A0;
+const byte ECHO_PIN = A1;
+const unsigned long SENSOR_INTERVAL_MS = 100UL;
+const unsigned long ECHO_TIMEOUT_US = 30000UL;
 
 char keys[ROWS][COLS] = {
-  {'0', '*', 'D', '#'},
-  {'8', '7', 'C', '9'},
-  {'2', '1', 'A', '3'},
-  {'5', '4', 'B', '6'}
+  {'7', '*', '1', '4'},
+  {'8', '0', '2', '5'},
+  {'9', '#', '3', '6'},
+  {'C', 'D', 'A', 'B'}
 };
 
 byte rowPins[ROWS] = {5, 4, 3, 2};
@@ -42,9 +48,9 @@ byte pressCount = 0;
 byte graphCurrentBucket = 0;
 unsigned long startupTime = 0;
 unsigned long graphBucketStart = 0;
-unsigned long lastActivityUpdate = 0;
-unsigned long lastGraphUpdate = 0;
+unsigned long lastSensorRead = 0;
 unsigned long lastKeyTime = 0;
+float distanceCm = -1.0;
 char lastKey = '-';
 bool hasPressedKey = false;
 bool petWasReacting = false;
@@ -114,59 +120,75 @@ void pruneOldPresses(unsigned long now) {
   }
 }
 
-bool drawCharacter() {
-  bool keyPressed = false;
+float readDistanceCm() {
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  unsigned long duration = pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
+  return duration ? duration / 58.0 : -1.0;
+}
+
+void drawCharacter(const char *state, unsigned long now) {
+  bool sleepy = strcmp(state, "Nobody") == 0;
+  bool excited = strcmp(state, "Omnipresent") == 0;
+  bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
+
   petDisplay.firstPage();
   do {
-    keyPressed = captureKeyPress() || keyPressed;
-    const int left = 18;
-    const int right = 126;
-    const int top = 10;
-    const int bottom = 50;
-    const int plotWidth = right - left;
-    const int plotHeight = bottom - top;
+    petDisplay.setFont(u8g2_font_6x12_tr);
+    int titleWidth = petDisplay.getStrWidth(state);
+    petDisplay.drawStr((78 - titleWidth) / 2, 11, state);
+    petDisplay.drawStr(0, 27, "US-025A");
+    petDisplay.drawLine(79, 16, 79, 63);
 
-    petDisplay.drawLine(left, top, left, bottom);
-    petDisplay.drawLine(left, bottom, right, bottom);
-    petDisplay.drawLine(left, top + plotHeight / 2,
-                        left + 3, top + plotHeight / 2);
-    petDisplay.drawLine(left + plotWidth / 2, bottom - 2,
-                        left + plotWidth / 2, bottom + 2);
-    petDisplay.drawLine(right, bottom - 2, right, bottom + 2);
-
+    char distanceLabel[8];
+    if (distanceCm < 0) {
+      strcpy(distanceLabel, "---");
+    } else {
+      dtostrf(distanceCm, 0, 1, distanceLabel);
+    }
+    petDisplay.setFont(u8g2_font_9x18B_tr);
+    petDisplay.drawStr(0, 52, distanceLabel);
+    int labelWidth = petDisplay.getStrWidth(distanceLabel);
     petDisplay.setFont(u8g2_font_5x8_tr);
-    petDisplay.drawStr(5, bottom + 3, "5");
-    petDisplay.drawStr(5, top + 3, "0");
-    petDisplay.drawStr(right - 31, 8, "keys/s");
-    petDisplay.drawStr(right - 22, 63, "-10s");
-    petDisplay.drawStr(left + plotWidth / 2 - 7, 63, "-5s");
-    petDisplay.drawStr(left, 63, "now");
+    petDisplay.drawStr(labelWidth + 2, 52, "cm");
 
-    int previousX = right;
-    int previousY = top;
-    for (byte i = 0; i < GRAPH_BUCKETS; i++) {
-      byte index = (graphCurrentBucket + 1 + i) % GRAPH_BUCKETS;
-      byte count = graphPresses[index];
-      if (count > GRAPH_MAX_PRESSES_PER_SECOND) {
-        count = GRAPH_MAX_PRESSES_PER_SECOND;
-      }
+    petDisplay.drawCircle(103, 40, 17);
+    if (sleepy) {
+      petDisplay.drawLine(95, 37, 99, 37);
+      petDisplay.drawLine(107, 37, 111, 37);
+      petDisplay.drawStr(119, 26, "Z");
+    } else if (excited) {
+      petDisplay.drawCircle(97, 35, 3);
+      petDisplay.drawCircle(109, 35, 3);
+      petDisplay.drawDisc(97, 35, 1);
+      petDisplay.drawDisc(109, 35, 1);
+    } else {
+      petDisplay.drawDisc(97, 36, 2);
+      petDisplay.drawDisc(109, 36, 2);
+    }
 
-      int x = right - (int)i * plotWidth / (GRAPH_BUCKETS - 1);
-      int y = top + (int)count * plotHeight /
-              GRAPH_MAX_PRESSES_PER_SECOND;
-      if (i > 0) {
-        petDisplay.drawLine(previousX, previousY, x, previousY);
-        petDisplay.drawLine(x, previousY, x, y);
-      }
-      petDisplay.drawDisc(x, y, 1);
-      previousX = x;
-      previousY = y;
+    if (sleepy) {
+      petDisplay.drawLine(99, 47, 107, 47);
+    } else if (excited) {
+      petDisplay.drawLine(96, 45, 103, 51);
+      petDisplay.drawLine(103, 51, 110, 45);
+    } else {
+      petDisplay.drawLine(98, 46, 103, 49);
+      petDisplay.drawLine(103, 49, 108, 46);
+    }
+
+    if (reacting) {
+      petDisplay.drawStr(117, 41, "!");
     }
   } while (petDisplay.nextPage());
   return keyPressed;
 }
 
-void drawActivity(const char *state) {
+void drawActivity(const char *state, unsigned long now) {
   display.firstPage();
   do {
     display.drawLine(38, 0, 38, 63);
@@ -219,12 +241,11 @@ void setup() {
 
   display.begin();
   petDisplay.begin();
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
   startupTime = millis();
   graphBucketStart = startupTime;
-  lastActivityUpdate = startupTime;
-  lastGraphUpdate = startupTime;
-  drawActivity("Waiting");
-  drawCharacter();
+  drawActivity("Waiting", startupTime);
   lastDisplayedState = "Waiting";
   Serial.println("Keypad ready!");
 }
@@ -232,10 +253,20 @@ void setup() {
 void loop() {
   unsigned long now = millis();
   advanceGraphBuckets(now);
-  bool keyPressed = captureKeyPress();
-  if (now - lastGraphUpdate >= GRAPH_REFRESH_MS) {
-    keyPressed = drawCharacter() || keyPressed;
-    lastGraphUpdate = millis();
+  bool sensorUpdated = false;
+  if (now - lastSensorRead >= SENSOR_INTERVAL_MS) {
+    distanceCm = readDistanceCm();
+    lastSensorRead = now;
+    sensorUpdated = true;
+  }
+  bool keyPressed = key != NO_KEY;
+
+  if (keyPressed) {
+    recordKeyPress(key, now);
+    Serial.print("Key pressed: ");
+    Serial.print(key);
+    Serial.print(" | Keys since boot: ");
+    Serial.println(keyPressCount);
   }
 
   now = millis();
@@ -246,16 +277,11 @@ void loop() {
   bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
   bool reactionEnded = petWasReacting && !reacting;
 
-  if (keyPressed || countChanged || stateChanged || reactionEnded ||
-      now - lastActivityUpdate >= ACTIVITY_REFRESH_MS) {
-    if (stateChanged) {
-      Serial.print("State: ");
-      Serial.println(state);
-    }
-    drawActivity(state);
+  if (keyPressed || stateChanged) {
+    drawActivity(state, now);
     lastDisplayedState = state;
-    lastDisplayedCount = keyPressCount;
-    lastActivityUpdate = now;
+  } else if (sensorUpdated || reactionEnded) {
+    drawCharacter(state, now);
   }
   petWasReacting = reacting;
 }
