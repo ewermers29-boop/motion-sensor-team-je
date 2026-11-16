@@ -10,8 +10,6 @@ U8G2_SSD1306_128X64_NONAME_1_SW_I2C petDisplay(
 
 const byte ROWS = 4;
 const byte COLS = 4;
-const byte GRAPH_BUCKETS = 12;
-const unsigned long GRAPH_BUCKET_MS = 500UL;
 const byte TRIG_PIN = A0;
 const byte ECHO_PIN = A1;
 const unsigned long SENSOR_INTERVAL_MS = 100UL;
@@ -226,7 +224,6 @@ void drawCharacter(const char *state, unsigned long now) {
       petDisplay.drawStr(117, 41, "!");
     }
   } while (petDisplay.nextPage());
-  return keyPressed;
 }
 
 void drawActivity(const char *state, unsigned long now) {
@@ -325,7 +322,6 @@ void loop() {
     keyPressCount = 0;
     pressHead = 0;
     pressCount = 0;
-    nobodyActive = false;
     hasPressedKey = false;
     lastKey = '-';
     Serial.println(farDistanceTimeout
