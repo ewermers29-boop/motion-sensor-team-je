@@ -16,6 +16,12 @@ const byte TRIG_PIN = A0;
 const byte ECHO_PIN = A1;
 const unsigned long SENSOR_INTERVAL_MS = 100UL;
 const unsigned long ECHO_TIMEOUT_US = 30000UL;
+const float MAX_ACTIVE_DISTANCE_CM = 100.0;
+const float MOTION_THRESHOLD_CM = 8.0;
+const byte MOTION_CONFIRMATION_READINGS = 2;
+const float DISTANCE_BASELINE_ADAPTATION = 0.1;
+const unsigned long MOTION_TIMEOUT_MS = 3000UL;
+const unsigned long FAR_DISTANCE_TIMEOUT_MS = 3000UL;
 
 char keys[ROWS][COLS] = {
   {'7', '*', '1', '4'},
@@ -50,7 +56,11 @@ unsigned long startupTime = 0;
 unsigned long graphBucketStart = 0;
 unsigned long lastSensorRead = 0;
 unsigned long lastKeyTime = 0;
+unsigned long lastMotionTime = 0;
+unsigned long farDistanceSince = 0;
 float distanceCm = -1.0;
+bool systemActive = false;
+bool farDistanceTiming = false;
 char lastKey = '-';
 bool hasPressedKey = false;
 bool petWasReacting = false;
@@ -129,6 +139,37 @@ float readDistanceCm() {
 
   unsigned long duration = pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
   return duration ? duration / 58.0 : -1.0;
+}
+
+bool detectMotion(float distance) {
+  static bool hasBaseline = false;
+  static float baselineCm = 0.0;
+  static byte changedReadings = 0;
+
+  if (!hasBaseline) {
+    baselineCm = distance;
+    hasBaseline = true;
+    return false;
+  }
+
+  float change = distance > baselineCm
+    ? distance - baselineCm
+    : baselineCm - distance;
+  if (change >= MOTION_THRESHOLD_CM) {
+    if (changedReadings < MOTION_CONFIRMATION_READINGS) {
+      changedReadings++;
+    }
+    if (changedReadings >= MOTION_CONFIRMATION_READINGS) {
+      baselineCm = distance;
+      changedReadings = 0;
+      return true;
+    }
+    return false;
+  }
+
+  changedReadings = 0;
+  baselineCm += (distance - baselineCm) * DISTANCE_BASELINE_ADAPTATION;
+  return false;
 }
 
 void drawCharacter(const char *state, unsigned long now) {
@@ -243,10 +284,9 @@ void setup() {
   petDisplay.begin();
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
-  startupTime = millis();
-  graphBucketStart = startupTime;
-  drawActivity("Waiting", startupTime);
-  lastDisplayedState = "Waiting";
+  graphBucketStart = millis();
+  drawActivity("Move to wake", graphBucketStart);
+  lastDisplayedState = "Move to wake";
   Serial.println("Keypad ready!");
 }
 
@@ -258,8 +298,42 @@ void loop() {
     distanceCm = readDistanceCm();
     lastSensorRead = now;
     sensorUpdated = true;
+    if (distanceCm >= 0) {
+      if (distanceCm > MAX_ACTIVE_DISTANCE_CM) {
+        if (!farDistanceTiming) {
+          farDistanceTiming = true;
+          farDistanceSince = now;
+        }
+      } else {
+        farDistanceTiming = false;
+        if (detectMotion(distanceCm)) {
+          lastMotionTime = now;
+          if (!systemActive) {
+            systemActive = true;
+            startupTime = now;
+            Serial.println("Ultrasonic motion detected; keypad enabled.");
+          }
+        }
+      }
+    }
   }
-  bool keyPressed = key != NO_KEY;
+  bool noMotionTimeout = now - lastMotionTime >= MOTION_TIMEOUT_MS;
+  bool farDistanceTimeout = farDistanceTiming &&
+    now - farDistanceSince >= FAR_DISTANCE_TIMEOUT_MS;
+  if (systemActive && (noMotionTimeout || farDistanceTimeout)) {
+    systemActive = false;
+    keyPressCount = 0;
+    pressHead = 0;
+    pressCount = 0;
+    nobodyActive = false;
+    hasPressedKey = false;
+    lastKey = '-';
+    Serial.println(farDistanceTimeout
+      ? "Distance over 100 cm; keypad disabled."
+      : "No ultrasonic motion; keypad disabled.");
+  }
+  char key = keypad.getKey();
+  bool keyPressed = systemActive && key != NO_KEY;
 
   if (keyPressed) {
     recordKeyPress(key, now);
