@@ -10,13 +10,13 @@ The kits come apart, so building the circuit is part of your work.
 
 1. A Nano, a breadboard and jumpers from the north racks in the Innovation Commons. If the Nano's header pins aren't soldered yet, that comes first. Ask Mr. Reasy before you heat an iron.
 2. Two sensors on the one Nano, one per partner. Wire each one and check it in the Arduino IDE's Serial Monitor at 115200 before the browser sees it.
-3. For the HC-SR04 sample, flash `bench/oled_demo/oled_demo.ino`. To try the keypad, flash `bench/bench.ino`; it is a separate keypad-only sketch.
+3. For the HC-SR04 sample, flash `bench/oled_demo/oled_demo.ino`. For the keypad and machine-status exercise, flash `bench/bench.ino`.
 
 ## The keypad sketch
 
-`bench/bench.ino` scans a 4x4 matrix. The original SSD1306 OLED shows the last pressed key, total press count, and activity state. A second SSD1306 OLED shows a character that gets sleepy in `Nobody`, wakes up in `Visitor`, and gets excited in `Omnipresent`; it also reacts briefly to each keypress. The states are `Nobody` after four seconds without a press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. The total count resets when the state first becomes `Nobody`; the sketch shows `Waiting` during the first four seconds after startup.
+`bench/bench.ino` scans a 4x4 matrix and reads an HC-SR04. The original SSD1306 OLED stays black unless the sensor status is `RESPONSIVE`; while responsive, it shows the last pressed key, total press count, and keypad activity state. Only key presses made while an object is detected within 12 cm are counted. A second SSD1306 OLED continues to report `RESPONSIVE` or `UNRESPONSIVE` and shows the measured distance. Three consecutive readings with no in-range echo trigger `UNRESPONSIVE`. Sensor diagnostics (echo pulse duration, measured distance, or no in-range echo) print to Serial Monitor at 9600 baud. The keypad states are `Nobody` after four seconds without a key press, `Visitor` for one or two presses in the last four seconds, and `Omnipresent` for more than two presses in the last five seconds. The total count resets when the state first becomes `Nobody`; the sketch shows `Waiting` during the first four seconds after startup.
 
-Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Keep the original OLED connected to SDA A4 and SCL A5. Connect the character OLED's SDA to D11 and SCL to D10. Both OLEDs share 5V and GND. The separate software-I2C pins let both screens use the same I2C address. Both displays use U8g2's page-buffered mode to reduce Nano memory use. This sketch needs the **Keypad** and **U8g2** libraries.
+Connect keypad rows to D2-D5 and columns to D6-D9, in the order shown in the sketch. Connect the HC-SR04's TRIG to A1 and ECHO to A0; share 5V and GND. Keep the original OLED connected to SDA A4 and SCL A5. Connect the second OLED's SDA to D11 and SCL to D10. Both OLEDs share 5V and GND. The separate software-I2C pins let both screens use the same I2C address. Both displays use U8g2's page-buffered mode to reduce Nano memory use. This sketch needs the **Keypad** and **U8g2** libraries.
 
 ## The reference build
 
@@ -59,7 +59,7 @@ Flash `bench/oled_demo/oled_demo.ino` for the sensor reference build. Open `benc
 
 ### The keypad exercise
 
-The separate `bench/bench.ino` keypad sketch shows the last key, press count and activity state on one OLED, and a 10-second activity graph on the second OLED. See [The keypad sketch](#the-keypad-sketch) for the wiring and display behavior.
+`bench/bench.ino` combines the keypad with the HC-SR04: one OLED shows keypad activity and the second reports whether an echo is being detected. See [The keypad sketch](#the-keypad-sketch) for wiring and display behavior.
 
 ## What's on the shelf
 
