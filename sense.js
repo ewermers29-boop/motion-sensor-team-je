@@ -78,7 +78,7 @@ function clamp(x) {
 
 // Smoothing: each new reading moves the signal a fraction of the way. Higher is
 // jumpier, lower is calmer. Thresholds in table.js read the smoothed numbers.
-const SMOOTHING = 0.25;
+const SMOOTHING = 0.55;
 
 // ---- The State Table, applied ----------------------------------------------
 
@@ -149,7 +149,7 @@ async function start() {
       landmarker = await FaceLandmarker.createFromOptions(vision, options);
     }
     button.textContent = 'Asking for the camera…';
-    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
     await video.play();
     for (const name of window.TABLE.signals) {
       if (!SIGNALS[name]) console.warn(`table.js names a signal "${name}" that sense.js does not read yet.`);
