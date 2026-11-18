@@ -94,6 +94,7 @@ Same rule as the shelf: the sensor gives a number and your State Table gives it 
 
 Keypad activity states:
 
-- `Nobody`: no key presses for at least 4 seconds.
-- `Visitor`: 1-2 key presses in the last 4 seconds.
-- `Omnipresent`: more than 2 key presses in the last 5 seconds.
+- `Nobody`: no motion detected. alternatively, no key presses for at least 4 seconds
+- `Visitor`: motion detected, 1-2 key presses in the last 4 seconds.
+- `Omnipresent`: motion detected, more than 2 key presses in the last 5 seconds.
+For one to be marked as "present" (visitor/omnipresent) motion must be detected. otherwise, it defaults to 'nobody'
