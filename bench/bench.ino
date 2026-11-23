@@ -11,12 +11,24 @@ U8G2_SSD1306_128X64_NONAME_1_SW_I2C petDisplay(
 
 const byte ROWS = 4;
 const byte COLS = 4;
+const byte GRAPH_BUCKETS = 12;
+const unsigned long GRAPH_BUCKET_MS = 500UL;
+const byte TRIG_PIN = A0;
+const byte ECHO_PIN = A1;
+const unsigned long SENSOR_INTERVAL_MS = 100UL;
+const unsigned long ECHO_TIMEOUT_US = 30000UL;
+const float MAX_ACTIVE_DISTANCE_CM = 100.0;
+const float MOTION_THRESHOLD_CM = 8.0;
+const byte MOTION_CONFIRMATION_READINGS = 2;
+const float DISTANCE_BASELINE_ADAPTATION = 0.1;
+const unsigned long MOTION_TIMEOUT_MS = 3000UL;
+const unsigned long FAR_DISTANCE_TIMEOUT_MS = 3000UL;
 
 char keys[ROWS][COLS] = {
-  {'0', '*', 'D', '#'},
-  {'8', '7', 'C', '9'},
-  {'2', '1', 'A', '3'},
-  {'5', '4', 'B', '6'}
+  {'7', '*', '1', '4'},
+  {'8', '0', '2', '5'},
+  {'9', '#', '3', '6'},
+  {'C', 'D', 'A', 'B'}
 };
 
 byte rowPins[ROWS] = {5, 4, 3, 2};
@@ -46,11 +58,14 @@ unsigned long pressTimes[MAX_TRACKED_PRESS_EVENTS];
 byte pressHead = 0;
 byte pressCount = 0;
 unsigned long startupTime = 0;
-unsigned long lastActivityUpdate = 0;
+unsigned long graphBucketStart = 0;
 unsigned long lastSensorRead = 0;
-unsigned long lastStatusDisplay = 0;
-unsigned long lastSensorDebug = 0;
 unsigned long lastKeyTime = 0;
+unsigned long lastMotionTime = 0;
+unsigned long farDistanceSince = 0;
+float distanceCm = -1.0;
+bool systemActive = false;
+bool farDistanceTiming = false;
 char lastKey = '-';
 bool hasPressedKey = false;
 bool petWasReacting = false;
@@ -101,80 +116,100 @@ void pruneOldPresses(unsigned long now) {
   }
 }
 
-void drawMachineStatus() {
-  char detail[20];
-  if (latestEchoDurationUs > 0) {
-    if (latestObjectDetected) {
-      snprintf(detail, sizeof(detail), "Distance: %d cm",
-               (int)(latestDistanceCm + 0.5));
-    } else {
-      snprintf(detail, sizeof(detail), "Too far: %d cm",
-               (int)(latestDistanceCm + 0.5));
-    }
-  } else if (strcmp(machineStatus, "CHECKING") == 0) {
-    snprintf(detail, sizeof(detail), "Waiting for echo");
-  } else {
-    snprintf(detail, sizeof(detail), "No echo detected");
-  }
-
-  petDisplay.firstPage();
-  do {
-    petDisplay.setFont(u8g2_font_6x12_tr);
-    petDisplay.drawStr(32, 13, "MACHINE STATUS");
-    petDisplay.setFont(u8g2_font_9x18B_tr);
-    int statusWidth = petDisplay.getStrWidth(machineStatus);
-    petDisplay.drawStr((128 - statusWidth) / 2, 40, machineStatus);
-    petDisplay.setFont(u8g2_font_5x8_tr);
-    int detailWidth = petDisplay.getStrWidth(detail);
-    petDisplay.drawStr((128 - detailWidth) / 2, 58, detail);
-  } while (petDisplay.nextPage());
-}
-
-void clearActivityScreen() {
-  display.firstPage();
-  do {
-    display.setDrawColor(0);
-    display.drawBox(0, 0, 128, 64);
-    display.setDrawColor(1);
-  } while (display.nextPage());
-}
-
-void updateMachineStatus(unsigned long now) {
+float readDistanceCm() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  latestEchoDurationUs = pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
-  bool echoReceived = latestEchoDurationUs > 0;
-  latestObjectDetected = false;
-  const char *nextStatus = machineStatus;
-  if (echoReceived) {
-    latestDistanceCm = latestEchoDurationUs / 58.0;
-    latestObjectDetected =
-      latestDistanceCm <= MAX_DETECTION_DISTANCE_CM;
-  }
-  if (latestObjectDetected) {
-    consecutiveNoDetectionReadings = 0;
-    if (latestDistanceCm <= BACKAWAY_DISTANCE_CM) {
-      nextStatus = "BACKAWAY";
-    } else {
-      nextStatus = "RESPONSIVE";
-    }
-  } else if (consecutiveNoDetectionReadings <
-             NO_DETECTION_READINGS_TO_FLAG) {
-    consecutiveNoDetectionReadings++;
-    if (consecutiveNoDetectionReadings >= NO_DETECTION_READINGS_TO_FLAG) {
-      nextStatus = "UNRESPONSIVE";
-    }
+  unsigned long duration = pulseIn(ECHO_PIN, HIGH, ECHO_TIMEOUT_US);
+  return duration ? duration / 58.0 : -1.0;
+}
+
+bool detectMotion(float distance) {
+  static bool hasBaseline = false;
+  static float baselineCm = 0.0;
+  static byte changedReadings = 0;
+
+  if (!hasBaseline) {
+    baselineCm = distance;
+    hasBaseline = true;
+    return false;
   }
 
-  bool statusChanged = strcmp(nextStatus, machineStatus) != 0;
-  if (statusChanged) {
-    machineStatus = nextStatus;
-    if (strcmp(machineStatus, "RESPONSIVE") != 0) {
-      clearActivityScreen();
+  float change = distance > baselineCm
+    ? distance - baselineCm
+    : baselineCm - distance;
+  if (change >= MOTION_THRESHOLD_CM) {
+    if (changedReadings < MOTION_CONFIRMATION_READINGS) {
+      changedReadings++;
+    }
+    if (changedReadings >= MOTION_CONFIRMATION_READINGS) {
+      baselineCm = distance;
+      changedReadings = 0;
+      return true;
+    }
+    return false;
+  }
+
+  changedReadings = 0;
+  baselineCm += (distance - baselineCm) * DISTANCE_BASELINE_ADAPTATION;
+  return false;
+}
+
+void drawCharacter(const char *state, unsigned long now) {
+  bool sleepy = strcmp(state, "Nobody") == 0;
+  bool excited = strcmp(state, "Omnipresent") == 0;
+  bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
+
+  petDisplay.firstPage();
+  do {
+    petDisplay.setFont(u8g2_font_6x12_tr);
+    int titleWidth = petDisplay.getStrWidth(state);
+    petDisplay.drawStr((78 - titleWidth) / 2, 11, state);
+    petDisplay.drawStr(0, 27, "US-025A");
+    petDisplay.drawLine(79, 16, 79, 63);
+
+    char distanceLabel[8];
+    if (distanceCm < 0) {
+      strcpy(distanceLabel, "---");
+    } else {
+      dtostrf(distanceCm, 0, 1, distanceLabel);
+    }
+    petDisplay.setFont(u8g2_font_9x18B_tr);
+    petDisplay.drawStr(0, 52, distanceLabel);
+    int labelWidth = petDisplay.getStrWidth(distanceLabel);
+    petDisplay.setFont(u8g2_font_5x8_tr);
+    petDisplay.drawStr(labelWidth + 2, 52, "cm");
+
+    petDisplay.drawCircle(103, 40, 17);
+    if (sleepy) {
+      petDisplay.drawLine(95, 37, 99, 37);
+      petDisplay.drawLine(107, 37, 111, 37);
+      petDisplay.drawStr(119, 26, "Z");
+    } else if (excited) {
+      petDisplay.drawCircle(97, 35, 3);
+      petDisplay.drawCircle(109, 35, 3);
+      petDisplay.drawDisc(97, 35, 1);
+      petDisplay.drawDisc(109, 35, 1);
+    } else {
+      petDisplay.drawDisc(97, 36, 2);
+      petDisplay.drawDisc(109, 36, 2);
+    }
+
+    if (sleepy) {
+      petDisplay.drawLine(99, 47, 107, 47);
+    } else if (excited) {
+      petDisplay.drawLine(96, 45, 103, 51);
+      petDisplay.drawLine(103, 51, 110, 45);
+    } else {
+      petDisplay.drawLine(98, 46, 103, 49);
+      petDisplay.drawLine(103, 49, 108, 46);
+    }
+
+    if (reacting) {
+      petDisplay.drawStr(117, 41, "!");
     }
     Serial.print("Machine: ");
     Serial.println(machineStatus);
@@ -200,7 +235,7 @@ void updateMachineStatus(unsigned long now) {
   lastSensorRead = now;
 }
 
-void drawActivity(const char *state) {
+void drawActivity(const char *state, unsigned long now) {
   display.firstPage();
   do {
     display.drawLine(38, 0, 38, 63);
@@ -255,26 +290,65 @@ void setup() {
   pinMode(ECHO_PIN, INPUT);
   display.begin();
   petDisplay.begin();
-  clearActivityScreen();
-  startupTime = millis();
-  lastActivityUpdate = startupTime;
-  lastStatusDisplay = startupTime;
-  lastSensorDebug = startupTime;
-  lastSensorRead = startupTime - SENSOR_REFRESH_MS;
-  drawMachineStatus();
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  graphBucketStart = millis();
+  drawActivity("Move to wake", graphBucketStart);
+  lastDisplayedState = "Move to wake";
   Serial.println("Keypad ready!");
 }
 
 void loop() {
   unsigned long now = millis();
-  if (now - lastSensorRead >= SENSOR_REFRESH_MS) {
-    updateMachineStatus(now);
+  advanceGraphBuckets(now);
+  bool sensorUpdated = false;
+  if (now - lastSensorRead >= SENSOR_INTERVAL_MS) {
+    distanceCm = readDistanceCm();
+    lastSensorRead = now;
+    sensorUpdated = true;
+    if (distanceCm >= 0) {
+      if (distanceCm > MAX_ACTIVE_DISTANCE_CM) {
+        if (!farDistanceTiming) {
+          farDistanceTiming = true;
+          farDistanceSince = now;
+        }
+      } else {
+        farDistanceTiming = false;
+        if (detectMotion(distanceCm)) {
+          lastMotionTime = now;
+          if (!systemActive) {
+            systemActive = true;
+            startupTime = now;
+            Serial.println("Ultrasonic motion detected; keypad enabled.");
+          }
+        }
+      }
+    }
   }
+  bool noMotionTimeout = now - lastMotionTime >= MOTION_TIMEOUT_MS;
+  bool farDistanceTimeout = farDistanceTiming &&
+    now - farDistanceSince >= FAR_DISTANCE_TIMEOUT_MS;
+  if (systemActive && (noMotionTimeout || farDistanceTimeout)) {
+    systemActive = false;
+    keyPressCount = 0;
+    pressHead = 0;
+    pressCount = 0;
+    nobodyActive = false;
+    hasPressedKey = false;
+    lastKey = '-';
+    Serial.println(farDistanceTimeout
+      ? "Distance over 100 cm; keypad disabled."
+      : "No ultrasonic motion; keypad disabled.");
+  }
+  char key = keypad.getKey();
+  bool keyPressed = systemActive && key != NO_KEY;
 
-  bool sensorResponsive = latestObjectDetected;
-  bool keyPressed = captureKeyPress(sensorResponsive);
-  if (!sensorResponsive) {
-    return;
+  if (keyPressed) {
+    recordKeyPress(key, now);
+    Serial.print("Key pressed: ");
+    Serial.print(key);
+    Serial.print(" | Keys since boot: ");
+    Serial.println(keyPressCount);
   }
 
   now = millis();
@@ -284,16 +358,11 @@ void loop() {
   bool reacting = hasPressedKey && now - lastKeyTime < 700UL;
   bool reactionEnded = petWasReacting && !reacting;
 
-  if (keyPressed || countChanged || stateChanged || reactionEnded ||
-      now - lastActivityUpdate >= ACTIVITY_REFRESH_MS) {
-    if (stateChanged) {
-      Serial.print("State: ");
-      Serial.println(state);
-    }
-    drawActivity(state);
+  if (keyPressed || stateChanged) {
+    drawActivity(state, now);
     lastDisplayedState = state;
-    lastDisplayedCount = keyPressCount;
-    lastActivityUpdate = now;
+  } else if (sensorUpdated || reactionEnded) {
+    drawCharacter(state, now);
   }
   petWasReacting = reacting;
 }
