@@ -32,7 +32,8 @@ const unsigned long ECHO_TIMEOUT_US = 2000UL;
 const unsigned long SENSOR_REFRESH_MS = 100UL;
 const unsigned long STATUS_DISPLAY_REFRESH_MS = 1000UL;
 const unsigned long SENSOR_DEBUG_REFRESH_MS = 1000UL;
-const float MAX_DETECTION_DISTANCE_CM = 12.0;
+const float MAX_DETECTION_DISTANCE_CM = 15.0;
+const float BACKAWAY_DISTANCE_CM = 5.0;
 const byte NO_DETECTION_READINGS_TO_FLAG = 3;
 
 unsigned long keyPressCount = 0;
@@ -156,7 +157,11 @@ void updateMachineStatus(unsigned long now) {
   }
   if (latestObjectDetected) {
     consecutiveNoDetectionReadings = 0;
-    nextStatus = "RESPONSIVE";
+    if (latestDistanceCm <= BACKAWAY_DISTANCE_CM) {
+      nextStatus = "BACKAWAY";
+    } else {
+      nextStatus = "RESPONSIVE";
+    }
   } else if (consecutiveNoDetectionReadings <
              NO_DETECTION_READINGS_TO_FLAG) {
     consecutiveNoDetectionReadings++;
